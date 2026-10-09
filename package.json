@@ -1,0 +1,35 @@
+{
+  "name": "@edgeorgie/retrieval-core",
+  "version": "1.0.0",
+  "description": "Shared TF-IDF chunking/scoring/prompt-building core extracted from edgeorgie/repoask-mcp and edgeorgie/ask-edgeorgie-mcp (the parts of their retrieval pipelines that were byte-identical between the two MCP servers).",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edgeorgie/retrieval-core.git"
+  },
+  "keywords": ["mcp", "rag", "retrieval", "tf-idf", "chunking"],
+  "author": "edgeorgie",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.7.3"
+  }
+}
