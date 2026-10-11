@@ -12,7 +12,13 @@ a local resume/evidence corpus. A direct diff of their source trees before
 this extraction showed `chunk.ts`, `vector.ts`, `embedder.ts` and `rag.ts`
 were **byte-identical** between the two repos — a real, unforced case of
 duplicated logic, not an artificial abstraction. This package is exactly that
-shared slice, unmodified, published once instead of copy-pasted twice.
+shared slice, published once instead of copy-pasted twice.
+
+The extraction itself changed no behavior. Two correctness fixes have landed
+since, and because both servers consume this package rather than keeping their
+own copies, each fix reached both at once — which is the concrete payoff of the
+extraction, and the reason the "Known limitations" section below is worth
+reading before trusting the retrieval quality.
 
 What's deliberately **not** in here: each server's indexing orchestration
 (`indexer.ts` / `corpus.ts`), its retrieval entrypoint (`retrieval.ts`, which
@@ -51,3 +57,47 @@ install, so `dist/` is always built fresh — no committed build artifacts.
 
 - [edgeorgie/repoask-mcp](https://github.com/edgeorgie/repoask-mcp)
 - [edgeorgie/ask-edgeorgie-mcp](https://github.com/edgeorgie/ask-edgeorgie-mcp)
+
+## Verification
+
+`npm run typecheck` (src **and** tests — `tsconfig.json` scopes `rootDir` to
+`src` for emit, so `tsconfig.check.json` exists to widen it), `npm run build`,
+`npm test`, and `npm audit --omit=dev` all run in CI on every push and PR.
+
+The suite is 27 tests. They are written against independent oracles rather than
+restating the implementation: `chunkFile`'s line ranges are checked by slicing
+the original content separately and comparing; L2 normalization is checked as a
+self-similarity invariant; `topK`'s ordering is checked against the language's
+own `sort`; IDF is checked by the behavior it exists to produce (a term in every
+document ranks below a term in one) rather than by recomputing its formula.
+
+Every assertion was mutation-tested — the implementation was deliberately broken
+and the suite confirmed to go red, then restored. Five mutations, each caught:
+reverting the tokenizer, reverting the citation regex, making `diversify` mutate
+its input, removing L2 normalization, and removing the chunk overlap.
+
+That process is the only reason this suite is trustworthy, and it is worth
+recording why. The first version of the end-to-end retrieval test indexed this
+package's own `src/` — real code, no fixture to drift — and it was **vacuous**.
+Fixing the tokenizer required writing a doc comment explaining the fix, and that
+comment contains the words "cited indexes"; the test's query then matched that
+comment as ordinary prose, with the tokenizer uninvolved, and ranked the *wrong*
+file. It passed with the broken tokenizer restored. The guard was passing because
+the prose explaining the guard mentioned the thing being guarded. It now runs
+against a deliberately prose-free fixture, plus a second test asserting the
+fixture stays that way.
+
+## Known limitations
+
+- **TF-IDF is lexical, not semantic.** A question sharing no vocabulary with the
+  source it should retrieve scores zero. There is no synonym handling: asking
+  about "authentication" will not retrieve a chunk that only ever says "login".
+  This is the deliberate tradeoff for needing no model download and no API key.
+- **The tokenizer is English-oriented.** Stopwords are an English list, and
+  identifier splitting assumes ASCII case conventions.
+- **`citedIndexes` cannot distinguish a citation from a `[n]` that is neither a
+  citation nor a subscript** — e.g. inside a string literal in a code block. It
+  excludes subscripts (`chunks[1]`), which is the common false positive, and
+  accepts everything else.
+- **No stemming.** "diversified" and "diversify" are different tokens, so a
+  query's exact word form affects matching.
