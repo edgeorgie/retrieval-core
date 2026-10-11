@@ -15,10 +15,15 @@ duplicated logic, not an artificial abstraction. This package is exactly that
 shared slice, published once instead of copy-pasted twice.
 
 The extraction itself changed no behavior. Two correctness fixes have landed
-since, and because both servers consume this package rather than keeping their
-own copies, each fix reached both at once — which is the concrete payoff of the
-extraction, and the reason the "Known limitations" section below is worth
-reading before trusting the retrieval quality.
+since (see "Known limitations" below for what retrieval still cannot do).
+
+Note that a fix landing here does **not** automatically reach the consumers.
+Both pin this package to a commit SHA in their `package-lock.json`, so `npm ci`
+in their CI and deploys installs that exact commit until the lockfile is bumped
+on purpose. That is the intended behavior — a floating git dependency silently
+changing a deployed server's retrieval on its next build would be worse — but it
+means propagating a fix is a deliberate step in each consumer, not a
+consequence of merging here.
 
 What's deliberately **not** in here: each server's indexing orchestration
 (`indexer.ts` / `corpus.ts`), its retrieval entrypoint (`retrieval.ts`, which
