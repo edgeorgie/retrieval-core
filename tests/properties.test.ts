@@ -58,6 +58,30 @@ test("tokenize drops stopwords and single characters, and emits no duplicates of
   assert.deepEqual(tokenize("query"), ["query"]);
 });
 
+test("stopwords are filtered on the sub-token path too, not only on whole tokens", () => {
+  // Case splitting opens a back door the whole-token filter does not cover:
+  // `toString` yields a "to" sub-token, `isValid` an "is", `canRetry` a "can".
+  // Those are the exact terms the stopword list exists to suppress, and they
+  // occur in nearly every identifier in a TypeScript codebase.
+  for (const [identifier, leaked] of [
+    ["toString", "to"],
+    ["isValid", "is"],
+    ["canRetry", "can"],
+    ["of_the_thing", "the"],
+  ] as const) {
+    const tokens = tokenize(identifier);
+    assert.ok(
+      !tokens.includes(leaked),
+      `"${identifier}" leaked stopword "${leaked}": ${JSON.stringify(tokens)}`
+    );
+  }
+  // The meaningful halves must survive — this must not become a blanket
+  // "drop short sub-tokens" rule.
+  assert.ok(tokenize("toString").includes("string"));
+  assert.ok(tokenize("isValid").includes("valid"));
+  assert.ok(tokenize("canRetry").includes("retry"));
+});
+
 // ---------------------------------------------------------------------------
 // TF-IDF: mathematical invariants, not recomputation of the same formula
 // ---------------------------------------------------------------------------
