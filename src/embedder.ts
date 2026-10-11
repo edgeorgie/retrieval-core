@@ -64,8 +64,18 @@ export function tokenize(text: string): string[] {
     const t = raw.toLowerCase();
     if (t.length < 2 || STOPWORDS.has(t)) continue;
     out.push(t);
-    const sub = splitIdentifier(raw).filter((s) => s.length > 1 && s !== t);
-    if (sub.length > 0) out.push(...sub);
+    // Sub-tokens are filtered by the SAME rules as whole tokens. Without this,
+    // case splitting leaks stopwords in through the back door: `toString` would
+    // emit "to", `isValid` would emit "is", `canRetry` would emit "can". Those
+    // are exactly the terms the stopword list exists to suppress, and they
+    // appear in nearly every identifier in a TypeScript codebase — so they
+    // would end up with a near-zero IDF but still consume vocabulary slots and
+    // add noise to every vector. The old tokenizer had the same hole on the
+    // snake_case path, where it was rare; case splitting makes it fire
+    // constantly, which is what turns a latent wart into a real problem.
+    for (const s of splitIdentifier(raw)) {
+      if (s.length > 1 && s !== t && !STOPWORDS.has(s)) out.push(s);
+    }
   }
   return out;
 }
