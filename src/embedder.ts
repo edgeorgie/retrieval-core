@@ -18,19 +18,54 @@ const STOPWORDS = new Set([
   "we", "they", "he", "she", "its", "their", "our", "your", "my",
 ]);
 
-/** Splits camelCase/snake_case/kebab-case identifiers into sub-tokens too, so code matches prose questions. */
+/**
+ * Splits one identifier into its constituent words on `_` and on case
+ * boundaries, lowercased.
+ *
+ * Case boundaries are handled in two passes because one regex cannot do both:
+ * `([a-z0-9])([A-Z])` catches the common `getUser` -> `get User` transition, and
+ * `([A-Z]+)([A-Z][a-z])` catches an acronym running into a word
+ * (`HTTPServer` -> `HTTP Server`), which the first pass cannot see because
+ * every character around the split is already uppercase.
+ */
+function splitIdentifier(raw: string): string[] {
+  return raw
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .split(/[\s_]+/)
+    .filter(Boolean)
+    .map((s) => s.toLowerCase());
+}
+
+/**
+ * Splits camelCase/snake_case/kebab-case identifiers into sub-tokens too, so
+ * code matches prose questions: a question asking about "cited indexes" has to
+ * be able to reach the chunk that defines `citedIndexes`.
+ *
+ * The whole lowercased token is ALSO emitted alongside its sub-tokens, so the
+ * vocabulary this produces is a strict superset of the one produced by splitting
+ * on `_` alone — an exact-identifier query (`embedBatchTfidf`) keeps matching on
+ * the opaque token exactly as before, and only gains the sub-token matches.
+ *
+ * Case splitting has to happen BEFORE lowercasing. An earlier version ran
+ * `.toLowerCase()` first and then split on `_`, which erased the only signal
+ * that `getUserName` is three words: `camelCase` identifiers collapsed into one
+ * opaque token, and since source files are mostly camelCase, prose questions
+ * about any camelCase symbol scored 0 against the chunk defining it. Covered by
+ * the end-to-end retrieval test in `tests/retrieval.test.ts`.
+ */
 export function tokenize(text: string): string[] {
   const base = text
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, " ")
+    .replace(/[^A-Za-z0-9_]+/g, " ")
     .split(/\s+/)
     .filter(Boolean);
   const out: string[] = [];
-  for (const t of base) {
+  for (const raw of base) {
+    const t = raw.toLowerCase();
     if (t.length < 2 || STOPWORDS.has(t)) continue;
     out.push(t);
-    const sub = t.split(/_+/).filter((s) => s.length > 1);
-    if (sub.length > 1) out.push(...sub);
+    const sub = splitIdentifier(raw).filter((s) => s.length > 1 && s !== t);
+    if (sub.length > 0) out.push(...sub);
   }
   return out;
 }

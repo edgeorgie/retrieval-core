@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      # `--include=dev` is explicit on purpose: if NODE_ENV ever leaks in as
+      # `production`, npm silently skips devDependencies (typescript, tsx) and
+      # the next step fails with a confusing "tsc: not found".
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      # `tsconfig.json` scopes `rootDir`/`include` to `src` because that is what
+      # gets emitted to `dist`. Typechecking it alone leaves `tests/` entirely
+      # unchecked, so a test could reference a removed export and only fail at
+      # runtime. `tsconfig.check.json` extends it with `noEmit` and widens the
+      # include to both, which is what this step runs.
+      - name: Typecheck (src + tests)
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      # This package has no runtime dependencies at all — `dependencies` in
+      # package.json is absent, by design: the retrieval path is pure TF-IDF
+      # with no model download and no API client. So the production tree is
+      # empty and this gate is trivially green today.
+      #
+      # It is here anyway, rather than omitted as pointless, because the day
+      # someone adds a runtime dependency to a package that two MCP servers
+      # consume as a git dependency, that is exactly the moment a gate should
+      # already exist. `--omit=dev` keeps it from firing on the TypeScript/tsx
+      # toolchain, whose advisories would be noise here.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
